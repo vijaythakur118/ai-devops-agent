@@ -2,9 +2,9 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 
-# AI / LangGraph
+# AI / LangGraph — versions verified compatible
 langchain==0.3.25
-langchain-core==0.3.29
+langchain-core==0.3.58
 langchain-ollama==0.2.3
 langgraph==0.2.60
 
