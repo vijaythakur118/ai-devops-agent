@@ -34,22 +34,26 @@ Available operations:
 Always extract: service name, environment/namespace, and any version/tag from the user command.
 Use the appropriate MCP tool to fulfill the request. Be precise and concise in your responses."""
 
-INTENT_MAP = {
-    "deploy": IntentType.DEPLOY,
-    "release": IntentType.DEPLOY,
-    "status": IntentType.STATUS,
-    "health": IntentType.STATUS,
-    "restart": IntentType.RESTART,
-    "bounce": IntentType.RESTART,
-    "log": IntentType.LOGS,
-    "rollback": IntentType.ROLLBACK,
-    "revert": IntentType.ROLLBACK,
-}
+# Order matters — longer/specific phrases must come before short ones
+# e.g. "deployment status" must match STATUS before "deploy" matches DEPLOY
+# e.g. "revert the last deployment" must match ROLLBACK before "deploy" matches DEPLOY
+INTENT_MAP = [
+    ("deployment status", IntentType.STATUS),
+    ("revert", IntentType.ROLLBACK),
+    ("rollback", IntentType.ROLLBACK),
+    ("restart", IntentType.RESTART),
+    ("bounce", IntentType.RESTART),
+    ("status", IntentType.STATUS),
+    ("health", IntentType.STATUS),
+    ("log", IntentType.LOGS),
+    ("release", IntentType.DEPLOY),
+    ("deploy", IntentType.DEPLOY),
+]
 
 
 def _detect_intent(command: str) -> IntentType:
     lower = command.lower()
-    for keyword, intent in INTENT_MAP.items():
+    for keyword, intent in INTENT_MAP:
         if keyword in lower:
             return intent
     return IntentType.UNKNOWN
