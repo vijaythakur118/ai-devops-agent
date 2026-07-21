@@ -1,0 +1,62 @@
+name: CD — Deploy to Kubernetes
+
+on:
+  workflow_dispatch:
+    inputs:
+      service:
+        description: "Service name to deploy"
+        required: true
+      environment:
+        description: "Target environment (staging | production)"
+        required: true
+        default: staging
+      image_tag:
+        description: "Docker image tag"
+        required: true
+        default: latest
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > ~/.kube/config
+
+      - name: Deploy service
+        run: |
+          kubectl set image deployment/${{ inputs.service }} \
+            ${{ inputs.service }}=ghcr.io/${{ github.repository }}/${{ inputs.service }}:${{ inputs.image_tag }} \
+            -n ${{ inputs.environment }}
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/${{ inputs.service }} \
+            -n ${{ inputs.environment }} --timeout=300s
+
+      - name: Verify health
+        run: |
+          READY=$(kubectl get deployment ${{ inputs.service }} \
+            -n ${{ inputs.environment }} \
+            -o jsonpath='{.status.readyReplicas}')
+          DESIRED=$(kubectl get deployment ${{ inputs.service }} \
+            -n ${{ inputs.environment }} \
+            -o jsonpath='{.spec.replicas}')
+          echo "Ready: $READY / Desired: $DESIRED"
+          [ "$READY" = "$DESIRED" ] || exit 1
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "Deployment failed — triggering rollback"
+          kubectl rollout undo deployment/${{ inputs.service }} -n ${{ inputs.environment }}

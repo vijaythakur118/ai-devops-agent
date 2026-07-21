@@ -1,0 +1,101 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: devops-agent
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-devops-agent
+  namespace: devops-agent
+spec:
+  selector:
+    app: ai-devops-agent
+  ports:
+    - port: 80
+      targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devops-agent-config
+  namespace: devops-agent
+data:
+  OLLAMA_BASE_URL: "http://ollama-service:11434"
+  OLLAMA_MODEL: "llama3"
+  K8S_IN_CLUSTER: "true"
+  MCP_SERVER_URL: "http://mcp-server:8001"
+  REDIS_URL: "redis://redis-service:6379"
+  DEBUG: "false"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: devops-agent-secrets
+  namespace: devops-agent
+type: Opaque
+stringData:
+  GITHUB_TOKEN: "<github-token>"
+  GITHUB_OWNER: "<github-owner>"
+  GITHUB_REPO: "<github-repo>"
+
+---
+# RBAC: Allow agent to manage deployments in all namespaces
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: devops-agent-sa
+  namespace: devops-agent
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: devops-agent-role
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "services"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: devops-agent-binding
+subjects:
+  - kind: ServiceAccount
+    name: devops-agent-sa
+    namespace: devops-agent
+roleRef:
+  kind: ClusterRole
+  name: devops-agent-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-devops-agent-hpa
+  namespace: devops-agent
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-devops-agent
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
